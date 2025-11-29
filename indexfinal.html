@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#166534"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Kisan Pro - AI Agriculture</title>
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/628/628283.png">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth-compat.js"></script>
+
+    <style>
+        body { background-color: #f0fdf4; font-family: 'Segoe UI', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
+        /* Glassmorphism & Cards */
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.6); }
+        .hero-card { background: linear-gradient(135deg, #166534 0%, #15803d 100%); color: white; }
+        
+        /* Map Container */
+        #map { height: 300px; width: 100%; border-radius: 0.75rem; z-index: 1; }
+        
+        /* Interactive Hover Effects */
+        .crop-card { transition: all 0.3s ease; border: 1px solid transparent; }
+        .crop-card:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); border-color: #22c55e; }
+        
+        .nav-btn { transition: all 0.3s; opacity: 0.85; position: relative; overflow: hidden; }
+        .nav-btn:hover { opacity: 1; background: rgba(255,255,255,0.2); }
+        .nav-btn.active { background: white; color: #166534; opacity: 1; font-weight: bold; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        
+        .sensor-card { transition: transform 0.2s; }
+        .sensor-card:hover { transform: scale(1.02); }
+
+        /* Input Styling */
+        .select-input { appearance: none; background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23137752%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E"); background-repeat: no-repeat; background-position: right 0.7rem top 50%; background-size: 0.65rem auto; }
+        
+        .data-table th { background-color: #dcfce7; color: #14532d; padding: 12px; text-align: left; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+        .data-table td { padding: 12px; border-bottom: 1px solid #f0fdf4; color: #374151; font-size: 0.9rem; }
+        .data-table tr:hover { background-color: #f0fdf4; }
+
+         /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #d1fae5; }
+        ::-webkit-scrollbar-thumb { background: #10b981; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #059669; }
+
+        /* Inputs */
+        .input-glass { background: rgba(255, 255, 255, 0.9); border: 1px solid #d1fae5; transition: all 0.2s; }
+        .input-glass:focus { outline: none; border-color: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
+        
+        /* Install Button Animation */
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        .install-btn-anim { animation: bounce 2s infinite; }
+
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- 1. FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLPgGOF4rOE4BwyhnZEHlceb6B9BypDwo", 
+            authDomain: "soil-monitoring-system-ba0f5.firebaseapp.com",
+            projectId: "soil-monitoring-system-ba0f5",
+            storageBucket: "soil-monitoring-system-ba0f5.appspot.com",
+            messagingSenderId: "",
+            appId: ""
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const appId = 'agri_stake_project'; 
+
+        // --- 2. MASSIVE CROP DATABASE & GENERATORS ---
+        const CROPS_LIST = ["Rice", "Wheat", "Maize", "Cotton", "Sugarcane", "Groundnut", "Mustard", "Soybean", "Potato", "Onion", "Tomato", "Banana", "Coconut", "Jute", "Coffee", "Tea", "Rubber", "Turmeric", "Ginger", "Garlic", "Chilli", "Coriander", "Cumin", "Black Pepper", "Cardamom", "Cashew", "Arecanut", "Apple", "Mango", "Grapes", "Orange", "Papaya", "Pomegranate", "Guava", "Watermelon", "Muskmelon", "Brinjal", "Okra", "Cabbage", "Cauliflower", "Carrot", "Radish", "Spinach", "Beans", "Peas", "Gram", "Lentil", "Moong", "Urad", "Arhar", "Bajra", "Jowar", "Ragi", "Barley", "Tobacco", "Sunflower", "Sesamum", "Castor", "Linseed", "Safflower", "Niger Seed"];
+        const STATES = ["Andhra Pradesh", "Assam", "Bihar", "Chhattisgarh", "Gujarat", "Haryana", "Himachal Pradesh", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Odisha", "Punjab", "Rajasthan", "Tamil Nadu", "Telangana", "Uttar Pradesh", "West Bengal"];
+        const DISTRICTS = ["Guntur", "Kurnool", "Patna", "Raipur", "Ahmedabad", "Ambala", "Shimla", "Bangalore", "Kottayam", "Bhopal", "Pune", "Nashik", "Cuttack", "Ludhiana", "Jaipur", "Coimbatore", "Hyderabad", "Lucknow", "Kolkata"];
+
+        // Generators for "1000+ entries" feel
+        const generateData = (count, type) => {
+            const data = [];
+            for(let i=0; i<count; i++) {
+                const state = STATES[Math.floor(Math.random() * STATES.length)];
+                const crop = CROPS_LIST[Math.floor(Math.random() * CROPS_LIST.length)];
+                const dist = DISTRICTS[Math.floor(Math.random() * DISTRICTS.length)];
+                
+                if (type === 'market') {
+                    const price = Math.floor(Math.random() * 8000 + 1000);
+                    data.push({ date: `2024-${Math.floor(Math.random()*12)+1}-${Math.floor(Math.random()*28)+1}`, state, district: dist, market: `APMC ${dist}`, commodity: crop, min: price-200, max: price+300, modal: price });
+                } else if (type === 'production') {
+                    data.push({ year: 2018 + Math.floor(Math.random()*6), state, district: dist, crop, season: ["Kharif","Rabi"][Math.floor(Math.random()*2)], area: Math.floor(Math.random()*10000), production: Math.floor(Math.random()*50000) });
+                } else if (type === 'soil') {
+                    data.push({ year: 2023, state, district: dist, rainfall: (Math.random()*2000+500).toFixed(1), ph: (Math.random()*3+5).toFixed(1), n: Math.floor(Math.random()*150), p: Math.floor(Math.random()*60), k: Math.floor(Math.random()*100) });
+                }
+            }
+            return data;
+        };
+
+        const MARKET_DATA = generateData(500, 'market');
+        const PROD_DATA = generateData(500, 'production');
+        const SOIL_DATA = generateData(400, 'soil');
+
+        // Detailed Crop DB for Encyclopedia & Advice
+        const CROP_DB = {};
+        CROPS_LIST.forEach(c => {
+            CROP_DB[c] = {
+                type: "General Crop", season: "Kharif", water: "Moderate", temp: "20-30°C", 
+                soils: ["Loamy", "Alluvial"], 
+                tips: "Ensure good drainage and pest control.",
+                schedule: ["Basal: NPK 50kg", "Mid: Urea 20kg", "End: Potash 10kg"]
+            };
+        });
+        // Specific Overrides for accuracy
+        Object.assign(CROP_DB, {
+            "Rice": { type: "Cereal", season: "Kharif", water: "High", temp: "20-35°C", soils: ["Clay", "Loamy"], tips: "Maintain 5cm standing water.", schedule: ["Basal: DAP+Potash", "Tillering: Urea", "Panicle: Urea"] },
+            "Cotton": { type: "Fiber", season: "Kharif", water: "Low", temp: "25-35°C", soils: ["Black"], tips: "Avoid water logging. Top plants at 90 days.", schedule: ["Basal: DAP", "Square formation: Urea", "Boll: Potash"] },
+            "Wheat": { type: "Cereal", season: "Rabi", water: "Moderate", temp: "10-25°C", soils: ["Loamy"], tips: "Irrigate at CRI stage (21 days).", schedule: ["Basal: NPK 12:32:16", "CRI: Urea"] }
+        });
+
+        // --- 3. HELPER COMPONENTS ---
+        const Icon = React.memo(({ name, size = 20, className = "" }) => {
+            const ref = useRef(null);
+            useEffect(() => {
+                if (!ref.current || !window.lucide) return;
+                const i = document.createElement('i');
+                i.setAttribute('data-lucide', name);
+                ref.current.innerHTML = '';
+                ref.current.appendChild(i);
+                window.lucide.createIcons({ root: ref.current, attrs: { class: className, width: size, height: size } });
+            }, [name, size, className]);
+            return <span ref={ref} style={{ display: 'inline-flex', alignItems: 'center' }}></span>;
+        });
+
+        const SensorCard = ({ title, value, unit, icon, color, status, subtext }) => (
+            <div className={`p-6 rounded-2xl border-l-4 ${color} bg-white hover-lift relative overflow-hidden group`}>
+                <div className="absolute right-0 top-0 p-4 opacity-10 transform translate-x-2 -translate-y-2 group-hover:scale-125 transition-transform"><Icon name={icon} size={64} /></div>
+                <div className="relative z-10">
+                    <div className="flex justify-between items-center mb-3">
+                        <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">{title}</p>
+                        <div className={`p-2 rounded-full ${color.replace('border-', 'bg-').replace('500', '100')}`}><Icon name={icon} size={20} className={color.replace('border-', 'text-')} /></div>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                        <h3 className="text-4xl font-extrabold text-gray-800">{value}</h3>
+                        <span className="text-sm font-medium text-gray-400">{unit}</span>
+                    </div>
+                    <div className="mt-3 flex justify-between items-center">
+                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${status === 'Optimal' || status === 'Good' || status === 'Wet' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{status}</span>
+                        <span className="text-xs text-gray-400 font-medium">{subtext}</span>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const MapView = ({ lat, lng }) => {
+            const mapRef = useRef(null);
+            const markerRef = useRef(null);
+            useEffect(() => {
+                if (!mapRef.current && document.getElementById('map')) {
+                    mapRef.current = L.map('map').setView([20.5937, 78.9629], 5);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapRef.current);
+                }
+            }, []);
+            useEffect(() => {
+                if (mapRef.current && (lat !== 0 || lng !== 0)) {
+                    if (!markerRef.current) markerRef.current = L.marker([lat, lng]).addTo(mapRef.current);
+                    else markerRef.current.setLatLng([lat, lng]);
+                    mapRef.current.setView([lat, lng], 16);
+                }
+            }, [lat, lng]);
+            return <div className="h-80 w-full rounded-2xl overflow-hidden shadow-lg border border-gray-200"><div id="map"></div></div>;
+        };
+
+        // --- 4. LOGIN COMPONENT ---
+        const LoginScreen = ({ onLogin }) => {
+            const [email, setEmail] = useState("chiru.cnt2005@gmail.com");
+            const [password, setPassword] = useState("12345678");
+            const [error, setError] = useState("");
+            const [loading, setLoading] = useState(false);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                try { await auth.signInWithEmailAndPassword(email, password); } catch (err) { setError("Login Failed: Check credentials or console."); setLoading(false); }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-800 to-emerald-600 p-4">
+                    <div className="max-w-md w-full bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden p-8 transform transition-all hover:scale-[1.01]">
+                        <div className="text-center mb-8">
+                            <div className="inline-block p-4 bg-green-100 rounded-full mb-4 shadow-inner"><Icon name="sprout" className="text-green-700" size={48} /></div>
+                            <h2 className="text-3xl font-extrabold text-gray-800">Smart Kisan Pro</h2>
+                            <p className="text-gray-500 font-medium">Next-Gen Farming Intelligence</p>
+                        </div>
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-medium" /></div>
+                            <div><label className="text-xs font-bold text-gray-500 uppercase ml-1">Password</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none font-medium" /></div>
+                            {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-lg text-center font-bold">{error}</div>}
+                            <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 rounded-xl hover:shadow-lg hover:from-green-700 hover:to-emerald-700 transition-all transform hover:-translate-y-1">{loading ? "Authenticating..." : "Access Dashboard"}</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 5. MAIN APP ---
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [subTab, setSubTab] = useState('market'); 
+            const [sensors, setSensors] = useState({ temperature: 0, humidity: 0, lux: 0, soil_moisture: 0, rain_raw: 4095, ph: 7.0, latitude: 0, longitude: 0 });
+            
+            // PWA Install State
+            const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+            // Dashboard State
+            const [soilType, setSoilType] = useState('Loamy');
+            const [selectedCrop, setSelectedCrop] = useState('');
+            
+            // Filters
+            const [searchQuery, setSearchQuery] = useState('');
+            const [filterState, setFilterState] = useState('');
+            const [filterCrop, setFilterCrop] = useState('');
+
+            // Rec State
+            const [recInput, setRecInput] = useState({ 
+                ph: 7.0, 
+                temp: 25, 
+                hum: 60,
+                moisture: 50,
+                lux: 1000,
+                rain: 0
+            });
+            const [recResult, setRecResult] = useState(null);
+
+            useEffect(() => { 
+                auth.onAuthStateChanged(u => setUser(u)); 
+
+                // Listen for Install Event
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    setDeferredPrompt(e);
+                });
+            }, []);
+
+            const handleInstall = () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then((choiceResult) => {
+                        if (choiceResult.outcome === 'accepted') {
+                            console.log('User accepted the A2HS prompt');
+                        }
+                        setDeferredPrompt(null);
+                    });
+                }
+            };
+            
+            // Live Data Hook
+            useEffect(() => {
+                if (!user) return;
+                const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('sensors').doc('live_data');
+                return docRef.onSnapshot(doc => { 
+                    if (doc.exists) { 
+                        const d = doc.data();
+                        setSensors(prev => ({...prev, ...d})); 
+                        if(!recResult) setRecInput({ 
+                            ph: d.ph || 7.0, 
+                            temp: d.temperature || 25, 
+                            hum: d.humidity || 60,
+                            moisture: d.soil_moisture || 50,
+                            lux: d.lux || 1000,
+                            rain: (d.rain_raw < 2500) ? 1 : 0
+                        });
+                    } 
+                });
+            }, [user]);
+
+            // --- AI ADVICE ENGINE ---
+            const getAdvice = () => {
+                const month = new Date().getMonth();
+                const season = (month >= 5 && month <= 9) ? "Kharif" : (month >= 10 || month <= 2) ? "Rabi" : "Zaid";
+                
+                let crop = selectedCrop;
+                if (!crop) {
+                    if (soilType === "Black") crop = "Cotton";
+                    else if (soilType === "Red" && sensors.soil_moisture < 40) crop = "Groundnut";
+                    else crop = (season === "Kharif") ? "Rice" : "Wheat";
+                }
+                const data = CROP_DB[crop] || CROP_DB["Rice"];
+
+                let alert = null;
+                if (sensors.ph < 5.5) alert = { type: 'acid', msg: 'Soil Acidic! Apply Lime.' };
+                else if (sensors.ph > 7.5) alert = { type: 'alkaline', msg: 'Soil Alkaline! Apply Gypsum.' };
+                else if (sensors.rain_raw < 2500) alert = { type: 'rain', msg: 'Rain Detected! Stop Irrigation.' };
+                else if (sensors.soil_moisture < 30 && sensors.rain_raw > 3000) alert = { type: 'dry', msg: 'Critical Moisture! Irrigate Now.' };
+                else if (sensors.lux > 40000 && crop === "Coffee") alert = { type: 'sun', msg: 'High Sunlight! Ensure Shade.' };
+
+                return { crop, data, season, alert };
+            };
+            
+            const advice = useMemo(() => getAdvice(), [sensors, soilType, selectedCrop]);
+
+            const handleRec = () => {
+                const data = CROP_DB[selectedCrop || "Rice"];
+                setRecResult({ 
+                    ...data, 
+                    phStat: recInput.ph < 6 ? "Acidic (Add Lime)" : recInput.ph > 7.5 ? "Alkaline (Add Gypsum)" : "Optimal",
+                    tempStat: "Optimal",
+                    moistureStat: recInput.moisture < 30 ? "Dry (Irrigate)" : recInput.moisture > 80 ? "Wet (Drain)" : "Optimal",
+                    lightStat: recInput.lux > 50000 ? "Very Bright" : recInput.lux < 1000 ? "Low Light" : "Moderate",
+                    rainStat: recInput.rain > 0 ? "Raining" : "No Rain",
+                    fertilizers: { base: data.schedule, top: ["Urea split dose"] }
+                });
+            };
+
+            const filteredEncyclopedia = Object.entries(CROP_DB).filter(([name]) => name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+            if (!user) return <LoginScreen />;
+
+            return (
+                <div className="min-h-screen pb-10">
+                    {/* Top Navigation */}
+                    <nav className="bg-gradient-to-r from-green-900 to-green-800 text-white sticky top-0 z-50 shadow-2xl backdrop-blur-md">
+                        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-white/10 p-2 rounded-xl backdrop-blur-sm"><Icon name="sprout" size={24} /></div>
+                                <div><h1 className="text-xl font-bold leading-none tracking-tight">Smart Kisan Pro</h1><span className="text-xs text-green-300 font-medium">AI Agriculture System</span></div>
+                            </div>
+                            
+                            {/* Desktop Nav */}
+                            <div className="hidden md:flex gap-2 bg-black/20 p-1 rounded-xl">
+                                {['dashboard', 'analytics', 'recommendation', 'encyclopedia'].map(tab => (
+                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold capitalize nav-btn ${activeTab === tab ? 'active' : 'text-green-100'}`}>{tab}</button>
+                                ))}
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                {/* Install Button */}
+                                {deferredPrompt && (
+                                    <button onClick={handleInstall} className="bg-white text-green-900 px-3 py-2 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg install-btn-anim border border-green-200">
+                                        <Icon name="download" size={16} /> Install App
+                                    </button>
+                                )}
+                                <button onClick={() => auth.signOut()} className="bg-red-500/90 hover:bg-red-500 p-2 rounded-xl transition-colors shadow-lg"><Icon name="log-out" size={20} /></button>
+                            </div>
+                        </div>
+                        {/* Mobile Nav */}
+                        <div className="md:hidden flex justify-around p-2 bg-green-900 border-t border-green-800 overflow-x-auto">
+                            {['dashboard', 'analytics', 'recommendation', 'encyclopedia'].map(tab => (
+                                <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-2 rounded-lg text-xs font-bold capitalize whitespace-nowrap ${activeTab === tab ? 'bg-white text-green-900' : 'text-green-100'}`}>{tab}</button>
+                            ))}
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
+                        
+                        {/* --- TAB: DASHBOARD --- */}
+                        {activeTab === 'dashboard' && (
+                            <>
+                                {/* Selection Bar */}
+                                <div className="glass-panel p-6 rounded-2xl shadow-sm flex flex-col md:flex-row gap-6">
+                                    <div className="flex-1">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block flex items-center gap-2"><Icon name="layers" size={14}/> Soil Type</label>
+                                        <select value={soilType} onChange={e=>setSoilType(e.target.value)} className="w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 select-input focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer hover:bg-gray-50 transition-colors">
+                                            {["Loamy", "Clay", "Red", "Black", "Alluvial", "Sandy", "Laterite"].map(s=><option key={s} value={s}>{s} Soil</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block flex items-center gap-2"><Icon name="wheat" size={14}/> Manual Crop Override</label>
+                                        <select value={selectedCrop} onChange={e=>setSelectedCrop(e.target.value)} className="w-full p-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 select-input focus:ring-2 focus:ring-green-500 outline-none shadow-sm cursor-pointer hover:bg-gray-50 transition-colors">
+                                            <option value="">✨ AI Auto-Recommend</option>
+                                            {Object.keys(CROP_DB).sort().map(c=><option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Dynamic Alert Banner */}
+                                {advice.alert ? (
+                                    <div className="bg-red-50 border-l-4 border-red-500 rounded-r-xl p-6 flex items-center gap-5 shadow-sm animate-pulse">
+                                        <div className="bg-red-100 p-3 rounded-full text-red-600"><Icon name="alert-triangle" size={32} /></div>
+                                        <div><h3 className="text-lg font-bold text-red-900">Action Required</h3><p className="text-red-700 font-medium">{advice.alert.msg}</p></div>
+                                    </div>
+                                ) : (
+                                    <div className="bg-green-50 border-l-4 border-green-500 rounded-r-xl p-6 flex items-center gap-5 shadow-sm">
+                                        <div className="bg-green-100 p-3 rounded-full text-green-600"><Icon name="check-circle" size={32} /></div>
+                                        <div><h3 className="text-lg font-bold text-green-900">System Healthy</h3><p className="text-green-700 font-medium">Conditions are optimal for growth.</p></div>
+                                    </div>
+                                )}
+
+                                {/* Hero Section */}
+                                <div className="hero-card rounded-3xl p-8 shadow-2xl grid lg:grid-cols-2 gap-10 relative overflow-hidden group">
+                                    <div className="absolute right-0 top-0 opacity-10 transform translate-x-12 -translate-y-12 transition-transform duration-700 group-hover:scale-110"><Icon name="flower" size={400} /></div>
+                                    <div className="relative z-10">
+                                        <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide mb-6 border border-white/20">
+                                            <Icon name="calendar" size={14} /> Season: {advice.season}
+                                        </div>
+                                        <h2 className="text-5xl font-extrabold mb-3 tracking-tight">{advice.crop}</h2>
+                                        <p className="text-green-100 mb-8 text-lg font-medium opacity-90">Best match for {soilType} soil in current conditions.</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-black/20 p-4 rounded-2xl backdrop-blur-md border border-white/10 hover:bg-black/30 transition-colors">
+                                                <p className="text-green-300 text-xs font-bold uppercase mb-1">Duration</p>
+                                                <p className="font-bold text-2xl">{CROP_DB[advice.crop]?.duration || "120 days"}</p>
+                                            </div>
+                                            <div className="bg-black/20 p-4 rounded-2xl backdrop-blur-md border border-white/10 hover:bg-black/30 transition-colors">
+                                                <p className="text-green-300 text-xs font-bold uppercase mb-1">Ideal Temp</p>
+                                                <p className="font-bold text-2xl">{advice.data.temp}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="relative z-10 bg-white/10 p-8 rounded-3xl border border-white/20 backdrop-blur-md shadow-inner">
+                                        <h3 className="font-bold text-xl mb-6 flex items-center gap-3"><div className="bg-white text-green-800 p-2 rounded-lg"><Icon name="clipboard-list" /></div> Action Plan</h3>
+                                        <div className="space-y-6">
+                                            <div>
+                                                <p className="text-green-200 text-xs font-bold uppercase mb-2">Fertilizer Schedule</p>
+                                                <ul className="text-sm space-y-3 font-medium text-white/90">
+                                                    {advice.data.schedule.map((s,i)=><li key={i} className="flex items-start gap-3"><div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-green-400 shadow-glow"></div>{s}</li>)}
+                                                </ul>
+                                            </div>
+                                            <div>
+                                                <p className="text-green-200 text-xs font-bold uppercase mb-1">Disease Watch</p>
+                                                <p className="text-sm font-medium text-white/90 leading-relaxed">{advice.data.tips}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Live Sensors Grid */}
+                                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
+                                    <SensorCard title="Soil Moisture" value={sensors.soil_moisture} unit="%" icon="droplets" color="border-emerald-500" status={sensors.soil_moisture < 30 ? "Dry" : "Optimal"} subtext="Root Zone" />
+                                    <SensorCard title="Temperature" value={sensors.temperature.toFixed(1)} unit="°C" icon="thermometer" color="border-orange-500" status={sensors.temperature > 35 ? "Hot" : "Good"} subtext="Ambient" />
+                                    <SensorCard title="Humidity" value={sensors.humidity.toFixed(0)} unit="%" icon="wind" color="border-blue-500" status="Normal" subtext="Air" />
+                                    <SensorCard title="Soil pH" value={sensors.ph.toFixed(1)} unit="pH" icon="flask-conical" color="border-purple-500" status={sensors.ph < 6 ? "Acidic" : "Neutral"} subtext="Acidity" />
+                                    <SensorCard title="Rainfall" value={sensors.rain_raw < 2500 ? "Yes" : "No"} unit="" icon="cloud-rain" color={sensors.rain_raw < 2500 ? "border-indigo-500" : "border-gray-300"} status={sensors.rain_raw < 2500 ? "Raining" : "Dry"} subtext="Live Sensor" />
+                                    <SensorCard title="Sunlight" value={sensors.lux.toFixed(0)} unit="lx" icon="sun" color="border-yellow-500" status={sensors.lux > 2000 ? "Bright" : "Dim"} subtext="Intensity" />
+                                </div>
+
+                                {/* Map */}
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="font-bold text-gray-800 flex items-center gap-3 text-lg"><Icon name="map-pin" className="text-red-500" /> Live Tracker</h3>
+                                        <span className="text-xs font-mono bg-gray-100 px-3 py-1.5 rounded-lg text-gray-600 font-bold tracking-tight border border-gray-200">
+                                            LAT: {sensors.latitude.toFixed(5)} | LNG: {sensors.longitude.toFixed(5)}
+                                        </span>
+                                    </div>
+                                    <div className="h-96 w-full rounded-2xl overflow-hidden shadow-inner border border-gray-200"><MapView lat={sensors.latitude} lng={sensors.longitude} /></div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* --- TAB: ANALYTICS --- */}
+                        {activeTab === 'analytics' && (
+                            <div className="space-y-6 animate-fade-in">
+                                <div className="flex gap-4 glass-panel p-2 rounded-xl">
+                                    {['market', 'production', 'soil'].map(t => (
+                                        <button key={t} onClick={() => setSubTab(t)} className={`flex-1 py-3 rounded-xl font-bold capitalize transition-all ${subTab === t ? 'bg-green-600 text-white shadow-lg' : 'text-gray-600 hover:bg-green-50'}`}>{t} Data</button>
+                                    ))}
+                                </div>
+
+                                <div className="bg-white p-6 rounded-2xl shadow-sm flex gap-4 border border-gray-100">
+                                    <div className="flex-1 relative">
+                                        <div className="absolute left-3 top-3 text-gray-400"><Icon name="map" size={18}/></div>
+                                        <select onChange={e=>setFilterState(e.target.value)} className="w-full pl-10 p-3 bg-gray-50 border rounded-xl font-bold select-input hover:bg-white transition-colors cursor-pointer"><option value="">All States</option>{STATES.map(s=><option key={s}>{s}</option>)}</select>
+                                    </div>
+                                    <div className="flex-1 relative">
+                                        <div className="absolute left-3 top-3 text-gray-400"><Icon name="wheat" size={18}/></div>
+                                        <select onChange={e=>setFilterCrop(e.target.value)} className="w-full pl-10 p-3 bg-gray-50 border rounded-xl font-bold select-input hover:bg-white transition-colors cursor-pointer"><option value="">All Crops</option>{CROPS_LIST.sort().map(c=><option key={c}>{c}</option>)}</select>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+                                    <div className="overflow-x-auto max-h-[600px]">
+                                        <table className="w-full data-table">
+                                            <thead className="sticky top-0 z-10 shadow-sm">
+                                                {subTab === 'market' && <tr><th>Date</th><th>State</th><th>Market</th><th>Commodity</th><th>Min Price</th><th>Max Price</th><th>Modal</th></tr>}
+                                                {subTab === 'production' && <tr><th>Year</th><th>State</th><th>District</th><th>Crop</th><th>Season</th><th>Area (Ha)</th><th>Production (Ton)</th></tr>}
+                                                {subTab === 'soil' && <tr><th>Year</th><th>State</th><th>District</th><th>Rainfall</th><th>pH</th><th>N</th><th>P</th><th>K</th></tr>}
+                                            </thead>
+                                            <tbody>
+                                                {subTab === 'market' && MARKET_DATA.filter(d => (!filterState || d.state === filterState)).slice(0,100).map((d,i)=><tr key={i}><td>{d.date}</td><td>{d.state}</td><td>{d.market}</td><td className="font-bold text-green-700">{d.commodity}</td><td>₹{d.min}</td><td>₹{d.max}</td><td className="font-bold bg-green-50">₹{d.modal}</td></tr>)}
+                                                {subTab === 'production' && PROD_DATA.filter(d => (!filterState || d.state === filterState)).slice(0,100).map((d,i)=><tr key={i}><td>{d.year}</td><td>{d.state}</td><td>{d.district}</td><td className="font-bold">{d.crop}</td><td>{d.season}</td><td>{d.area}</td><td>{d.production}</td></tr>)}
+                                                {subTab === 'soil' && SOIL_DATA.filter(d => (!filterState || d.state === filterState)).slice(0,100).map((d,i)=><tr key={i}><td>{d.year}</td><td>{d.state}</td><td>{d.district}</td><td>{d.rainfall}mm</td><td className={d.ph<6?"text-red-500 font-bold":"text-green-600 font-bold"}>{d.ph}</td><td>{d.n}</td><td>{d.p}</td><td>{d.k}</td></tr>)}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- TAB: RECOMMENDATION --- */}
+                        {activeTab === 'recommendation' && (
+                            <div className="grid lg:grid-cols-3 gap-8">
+                                <div className="bg-white p-8 rounded-3xl shadow-sm h-fit border border-gray-100">
+                                    <h3 className="font-bold mb-6 text-green-900 text-xl flex items-center gap-3"><div className="bg-green-100 p-2 rounded-lg"><Icon name="sliders" size={20} /></div> Manual Input</h3>
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Crop Selection</label>
+                                            <select value={selectedCrop} onChange={e=>setSelectedCrop(e.target.value)} className="w-full p-4 bg-gray-50 border rounded-xl font-bold select-input outline-none focus:ring-2 focus:ring-green-500"><option>Rice</option>{CROPS_LIST.sort().map(c=><option key={c}>{c}</option>)}</select>
+                                        </div>
+                                        
+                                        {/* ADDED INPUTS FOR SENSORS */}
+                                        <div>
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Soil pH Level</label>
+                                            <input type="number" step="0.1" value={recInput.ph} onChange={e=>setRecInput({...recInput, ph: e.target.value})} className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-green-500 text-lg"/>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Temp (°C)</label>
+                                                <input type="number" step="0.1" value={recInput.temp} onChange={e=>setRecInput({...recInput, temp: e.target.value})} className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-green-500 text-lg"/>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Humidity (%)</label>
+                                                <input type="number" value={recInput.hum} onChange={e=>setRecInput({...recInput, hum: e.target.value})} className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-green-500 text-lg"/>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Soil Moisture (%)</label>
+                                                <input type="number" value={recInput.moisture} onChange={e=>setRecInput({...recInput, moisture: e.target.value})} className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-green-500 text-lg"/>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Light (Lux)</label>
+                                                <input type="number" value={recInput.lux} onChange={e=>setRecInput({...recInput, lux: e.target.value})} className="w-full p-4 bg-gray-50 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-green-500 text-lg"/>
+                                            </div>
+                                        </div>
+                                         <div>
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Rainfall Status (0=No, 1=Yes)</label>
+                                            <select value={recInput.rain} onChange={e=>setRecInput({...recInput, rain: e.target.value})} className="w-full p-4 bg-gray-50 border rounded-xl font-bold select-input outline-none focus:ring-2 focus:ring-green-500"><option value="0">No Rain</option><option value="1">Raining</option></select>
+                                        </div>
+
+                                        <button onClick={handleRec} className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all flex justify-center items-center gap-2">Generate Smart Plan <Icon name="zap" size={18}/></button>
+                                    </div>
+                                </div>
+                                <div className="lg:col-span-2">
+                                    {recResult ? (
+                                        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+                                            <div className="flex justify-between items-start mb-6 border-b border-gray-100 pb-6">
+                                                <div>
+                                                    <h2 className="text-3xl font-extrabold text-gray-800">{selectedCrop || "Rice"}</h2>
+                                                    <p className="text-green-600 font-medium">Customized Action Plan based on Inputs</p>
+                                                </div>
+                                                <div className="bg-green-50 px-4 py-2 rounded-lg text-green-800 font-bold text-sm">ID: #{Math.floor(Math.random()*10000)}</div>
+                                            </div>
+                                            <div className="grid gap-6">
+                                                {/* Detailed Analysis Cards */}
+                                                <div className="grid grid-cols-2 gap-4">
+                                                     <div className={`p-4 rounded-xl flex items-center gap-4 ${recResult.phStat.includes('Acidic') ? 'bg-red-50 text-red-800 border border-red-100' : 'bg-green-50 text-green-800 border border-green-100'}`}>
+                                                        <Icon name="flask-conical" size={24} />
+                                                        <div><p className="font-bold text-sm uppercase opacity-70">pH Analysis</p><p className="font-bold text-lg">{recResult.phStat}</p></div>
+                                                    </div>
+                                                    <div className={`p-4 rounded-xl flex items-center gap-4 ${recResult.moistureStat.includes('Optimal') ? 'bg-green-50 text-green-800 border border-green-100' : 'bg-orange-50 text-orange-800 border border-orange-100'}`}>
+                                                        <Icon name="droplets" size={24} />
+                                                        <div><p className="font-bold text-sm uppercase opacity-70">Moisture Status</p><p className="font-bold text-lg">{recResult.moistureStat}</p></div>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-lg"><Icon name="sprout" className="text-green-600" /> Fertilizer Schedule</h4>
+                                                    <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                                                        <ul className="space-y-4">
+                                                            {recResult.fertilizers.base.map((f,i)=>(
+                                                                <li key={i} className="flex gap-4">
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-200"></div>
+                                                                        {i !== recResult.fertilizers.base.length-1 && <div className="w-0.5 h-full bg-gray-200"></div>}
+                                                                    </div>
+                                                                    <span className="font-medium text-gray-700">{f}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : <div className="h-full min-h-[300px] border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 bg-gray-50/50"><Icon name="clipboard-list" size={64} className="mb-4 opacity-20" /><p className="font-medium">Enter parameters to generate detailed plan</p></div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- TAB: ENCYCLOPEDIA --- */}
+                        {activeTab === 'encyclopedia' && (
+                            <div className="space-y-8">
+                                <div className="relative max-w-2xl mx-auto">
+                                    <input type="text" placeholder="Search 60+ Crops Database..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full p-5 pl-14 bg-white border-none rounded-2xl shadow-lg text-lg font-medium focus:ring-4 focus:ring-green-500/20 outline-none" />
+                                    <div className="absolute left-5 top-5 text-green-600"><Icon name="search" size={24} /></div>
+                                </div>
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {filteredEncyclopedia.map(([name, data])=>(
+                                        <div key={name} className="bg-white p-6 rounded-2xl shadow-sm hover-lift crop-card cursor-pointer border border-gray-100 group">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <h3 className="font-bold text-gray-800 text-xl group-hover:text-green-700 transition-colors">{name}</h3>
+                                                <span className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full font-bold uppercase tracking-wide">{data.type}</span>
+                                            </div>
+                                            <div className="space-y-2 text-sm text-gray-600 font-medium mb-4">
+                                                <div className="flex items-center gap-2"><Icon name="calendar" size={16} className="text-green-500" /> {data.season}</div>
+                                                <div className="flex items-center gap-2"><Icon name="droplets" size={16} className="text-blue-500" /> {data.water} Water</div>
+                                                <div className="flex items-center gap-2"><Icon name="thermometer" size={16} className="text-orange-500" /> {data.temp}</div>
+                                            </div>
+                                            <div className="pt-4 border-t border-gray-100 mt-4">
+                                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">Expert Tip</p>
+                                                <p className="text-sm italic text-gray-500 leading-relaxed">"{data.tips}"</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {filteredEncyclopedia.length === 0 && <div className="col-span-full py-20 text-center text-gray-400"><Icon name="search-x" size={48} className="mx-auto mb-4 opacity-50" /><p>No crops found matching "{searchQuery}"</p></div>}
+                                </div>
+                            </div>
+                        )}
+
+                    </main>
+                </div>
+            );
+        };
+        
+        // --- 6. PWA SERVICE WORKER REGISTRATION ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker Registered'))
+                .catch(err => console.log('Service Worker Failed', err));
+            });
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

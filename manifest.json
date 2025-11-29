@@ -1,0 +1,21 @@
+{
+  "name": "Smart Kisan Pro",
+  "short_name": "Smart Kisan",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f0fdf4",
+  "theme_color": "#166534",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/628/628283.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/628/628283.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
